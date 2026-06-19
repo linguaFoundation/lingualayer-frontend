@@ -87,3 +87,5 @@ export default function Image() {
     }
   );
 }
+
+// improvement #24
