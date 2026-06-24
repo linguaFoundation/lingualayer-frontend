@@ -51,3 +51,5 @@ export default function HomePage() {
     </>
   );
 }
+
+// improvement #27
