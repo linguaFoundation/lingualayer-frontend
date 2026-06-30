@@ -226,3 +226,5 @@ Match repository license (Apache-2.0 common for OSS grants).
 **npm package:** `lingualayer-web` · **Slug:** `lingualayer` · **Stack:** Next.js App Router
 
 **Ship it.** 🚀
+
+// improvement #30
