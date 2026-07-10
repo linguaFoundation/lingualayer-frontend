@@ -17,12 +17,16 @@ export async function detectAvailableWallets(): Promise<WalletType[]> {
   if (typeof window === 'undefined') return available;
 
   // Freighter
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((window as any).freighter) available.push('freighter');
   // xBull
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((window as any).xBullSDK || (window as any).xBullWalletExtension) available.push('xbull');
   // Lobstr
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((window as any).lobstrSorobanExtension) available.push('lobstr');
   // Hana
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((window as any).hana) available.push('hana');
 
   return available;

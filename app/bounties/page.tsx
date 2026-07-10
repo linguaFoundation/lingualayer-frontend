@@ -1,6 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
+import { EmptyState } from '@/components/empty-state';
+import { BountiesEmptySvg } from '@/components/illustrations';
+
+// This page uses useWallet (client-only context) — disable static prerendering.
+export const dynamic = 'force-dynamic';
 
 interface Commission {
   id: string;
@@ -58,12 +63,14 @@ export default function BountyBoardPage() {
       <div className="bounty-filters">
         <button
           className={filter === 'open' ? 'filter-pill active' : 'filter-pill'}
+          id="filter-open-btn"
           onClick={() => setFilter('open')}
         >
           Open Bounties
         </button>
         <button
           className={filter === 'all' ? 'filter-pill active' : 'filter-pill'}
+          id="filter-all-btn"
           onClick={() => setFilter('all')}
         >
           All
@@ -71,18 +78,21 @@ export default function BountyBoardPage() {
       </div>
 
       {loading ? (
-        <div className="bounty-skeleton-grid">
+        <div className="bounty-skeleton-grid" aria-label="Loading bounties…">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="bounty-card skeleton" />
+            <div key={i} className="bounty-card skeleton" aria-hidden="true" />
           ))}
         </div>
       ) : (
         <div className="bounty-grid">
           {commissions.length === 0 ? (
-            <div className="bounty-empty">
-              <span>No open commissions yet.</span>
-              <p>Be the first AI company to commission African language data.</p>
-            </div>
+            <EmptyState
+              illustration={<BountiesEmptySvg />}
+              title="No bounties yet."
+              description="Be the first AI company to commission African language data and make a lasting impact on linguistic equity."
+              ctaText="Post a Commission"
+              ctaHref="#post-commission"
+            />
           ) : (
             commissions.map(c => (
               <article key={c.id} className="bounty-card">
