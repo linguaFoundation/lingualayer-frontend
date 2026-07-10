@@ -3,6 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import "./globals.css";
 import { WalletProvider } from "@/contexts/WalletContext";
+import { ThemeToggle } from "@/components/theme-toggle";
+
 
 export const metadata: Metadata = {
   metadataBase: new URL("http://localhost:3000"),
@@ -40,7 +42,22 @@ const nav = [
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                let theme = localStorage.getItem('theme');
+                if (!theme) {
+                  theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                document.documentElement.setAttribute('data-theme', theme);
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
       <body>
         <header className="nav">
           <div className="container nav-inner">
@@ -59,6 +76,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {nav.map(([label, href]) => (
                 <Link key={href} href={href}>{label}</Link>
               ))}
+              <ThemeToggle />
             </nav>
           </div>
         </header>
