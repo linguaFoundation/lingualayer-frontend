@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { DatasetsEmptySvg } from '@/components/illustrations';
+import { QualityBadge, type QualityTier } from '@/components/quality-badge';
 
 /**
  * /datasets — Dataset discovery page.
@@ -13,9 +14,13 @@ export default function DatasetsPage() {
   const [query, setQuery] = useState('');
 
   // In production this list would be fetched from the API and filtered server-
-  // side or client-side. For now it is empty to demonstrate the empty state.
-  const datasets: unknown[] = [];
-  const filtered = datasets.filter(() => true); // placeholder filter
+  // side or client-side. For now it is mocked to demonstrate the badges.
+  const datasets = [
+    { id: 'yor-01', title: 'Yoruba ASR Conversational', language: 'yor', tier: 'Gold' as QualityTier, score: 92, samples: 14500 },
+    { id: 'ibo-02', title: 'Igbo News Transcription', language: 'ibo', tier: 'Silver' as QualityTier, score: 78, samples: 8200 },
+    { id: 'hau-01', title: 'Hausa Medical Parallel', language: 'hau', tier: 'Unrated' as QualityTier, score: undefined, samples: 3400 },
+  ];
+  const filtered = query.trim() ? datasets.filter(d => d.title.toLowerCase().includes(query.toLowerCase()) || d.language.includes(query.toLowerCase())) : datasets;
 
   const hasQuery = query.trim().length > 0;
 
@@ -69,7 +74,16 @@ export default function DatasetsPage() {
         />
       ) : (
         <div className="grid" role="list" aria-label="Dataset list">
-          {/* Dataset cards would render here */}
+          {filtered.map(d => (
+            <article key={d.id} className="card" style={{ position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 18, right: 18 }}>
+                <QualityBadge tier={d.tier} score={d.score} compact />
+              </div>
+              <span className="lang-badge">{d.language.toUpperCase()}</span>
+              <h3 style={{ marginTop: 12 }}>{d.title}</h3>
+              <p>{d.samples.toLocaleString()} samples</p>
+            </article>
+          ))}
         </div>
       )}
     </div>

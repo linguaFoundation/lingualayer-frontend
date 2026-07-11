@@ -1,5 +1,6 @@
 import { EmptyState } from '@/components/empty-state';
 import { ContributorEmptySvg } from '@/components/illustrations';
+import { QualityBadge, type QualityTier } from '@/components/quality-badge';
 import type { Metadata } from 'next';
 
 interface PageProps {
@@ -33,7 +34,10 @@ export default async function ContributorPage({ params }: PageProps) {
   const avatarInitial = address.slice(2, 4).toUpperCase();
 
   // In production: const activity = await fetchContributorActivity(address);
-  const activity: unknown[] = [];
+  const activity = [
+    { id: 'tx-1', title: 'Yoruba ASR Conversational', language: 'yor', tier: 'Gold' as QualityTier, score: 92, date: '2026-07-01' },
+    { id: 'tx-2', title: 'Hausa Medical Parallel', language: 'hau', tier: 'Unrated' as QualityTier, score: undefined, date: '2026-07-08' },
+  ];
 
   return (
     <div className="contributor-page">
@@ -61,7 +65,16 @@ export default async function ContributorPage({ params }: PageProps) {
         />
       ) : (
         <div className="grid" role="list" aria-label={`Datasets by ${truncated}`}>
-          {/* Dataset cards would render here */}
+          {activity.map(d => (
+            <article key={d.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <span className="lang-badge">{d.language.toUpperCase()}</span>
+                <QualityBadge tier={d.tier} score={d.score} />
+              </div>
+              <h3 style={{ margin: 0 }}>{d.title}</h3>
+              <p style={{ fontSize: '0.85rem' }}>Registered: {d.date}</p>
+            </article>
+          ))}
         </div>
       )}
     </div>

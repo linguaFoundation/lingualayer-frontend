@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import { EmptyState } from '@/components/empty-state';
 import { BountiesEmptySvg } from '@/components/illustrations';
+import { QualityBadge } from '@/components/quality-badge';
 
 // This page uses useWallet (client-only context) — disable static prerendering.
 export const dynamic = 'force-dynamic';
@@ -114,6 +115,9 @@ export default function BountyBoardPage() {
                     <button className="cta-sm" id={`claim-${c.id}`}>
                       Claim Bounty
                     </button>
+                  )}
+                  {c.state === 'fulfilled' && (
+                    <QualityBadge tier="Gold" score={95} compact />
                   )}
                 </div>
               </article>
