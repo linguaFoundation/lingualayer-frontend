@@ -13,6 +13,7 @@
  */
 
 import { getWalletsKit } from "./wallets-kit";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { Transaction } from "@stellar/stellar-sdk";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";

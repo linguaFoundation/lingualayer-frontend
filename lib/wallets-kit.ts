@@ -16,6 +16,8 @@
  *   - HOT Wallet   (Telegram mini-app wallet)
  */
 
+// Package types are declared in typings/stellar-wallets-kit.d.ts
+// (the package was removed from npm; the .d.ts keeps TypeScript happy)
 import {
   StellarWalletsKit,
   WalletNetwork,
@@ -47,6 +49,7 @@ export function getWalletsKit(): StellarWalletsKit {
   });
   return _kit;
 }
+
 
 export interface WalletInfo {
   id: string;
