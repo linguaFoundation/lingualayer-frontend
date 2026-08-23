@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import "./globals.css";
+import { WalletProvider } from "@/contexts/WalletContext";
 
 export const metadata: Metadata = {
   metadataBase: new URL("http://localhost:3000"),
@@ -41,6 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
+        <WalletProvider>
         <header className="nav">
           <div className="container nav-inner">
             <Link href="/" className="brand brand-with-logo">
@@ -62,6 +64,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
         <main className="container">{children}</main>
+        </WalletProvider>
       </body>
     </html>
   );

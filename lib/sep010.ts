@@ -12,8 +12,7 @@
  *         → server verifies signature → returns JWT
  */
 
-import { getWalletsKit } from "./wallets-kit";
-import type { Transaction } from "@stellar/stellar-sdk";
+import { signTransaction as signWithKit } from "./wallets-kit";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
 
@@ -41,14 +40,7 @@ export async function sep010Auth(
   const { transaction: challengeXdr } = await challengeRes.json();
 
   // Step 2: sign with wallet
-  const kit = getWalletsKit();
-  await kit.setWallet(walletId);
-  const { signedTxXdr } = await kit.signTransaction(challengeXdr, {
-    networkPassphrase:
-      process.env.NEXT_PUBLIC_STELLAR_NETWORK === "mainnet"
-        ? "Public Global Stellar Network ; September 2015"
-        : "Test SDF Network ; September 2015",
-  });
+  const signedTxXdr = await signWithKit(challengeXdr, walletId);
 
   // Step 3: exchange for JWT
   const tokenRes = await fetch(`${API}/auth/token`, {
