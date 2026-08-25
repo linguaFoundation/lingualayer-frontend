@@ -3,6 +3,15 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import { EmptyState } from '@/components/empty-state';
 import { BountiesIllustration } from '@/components/illustrations';
+import { CountdownTimer } from '@/components/countdown-timer';
+
+/** Stellar ledgers close roughly every 5 seconds. */
+const SECONDS_PER_LEDGER = 5;
+
+function deadlineDate(deadlineLedger: number, currentLedger: number): Date {
+  const secondsRemaining = (deadlineLedger - currentLedger) * SECONDS_PER_LEDGER;
+  return new Date(Date.now() + secondsRemaining * 1000);
+}
 import { ShareButtons } from '@/components/share-buttons';
 
 interface Commission {
@@ -45,6 +54,7 @@ const EMPTY_FORM: PostCommissionForm = {
 
 export default function BountyBoardPage() {
   const [commissions, setCommissions] = useState<Commission[]>([]);
+  const [currentLedger, setCurrentLedger] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'open' | 'all'>('open');
   const [showPostModal, setShowPostModal] = useState(false);
@@ -61,6 +71,11 @@ export default function BountyBoardPage() {
       .then(d => setCommissions(d.items ?? []))
       .catch(() => setCommissions([]))
       .finally(() => setLoading(false));
+
+    fetch(`${API}/ledger/latest`)
+      .then((r) => r.json())
+      .then((d) => setCurrentLedger(d.sequence ?? 0))
+      .catch(() => setCurrentLedger(0));
   }, [filter]);
 
   async function submitCommission(e: FormEvent) {
@@ -175,10 +190,18 @@ export default function BountyBoardPage() {
                   <li>≥ {c.min_sample_count.toLocaleString()} samples</li>
                   <li>≥ {c.min_duration_hours}h of audio</li>
                 </ul>
+                {c.state === 'open' && currentLedger > 0 && (
+                  <CountdownTimer targetDate={deadlineDate(c.deadline_ledger, currentLedger)} />
+                )}
                 <div className="bounty-footer">
                   <span className="commissioner">
                     by {c.commissioner_truncated}
                   </span>
+                  {c.state === 'open' && connection && c.deadline_ledger > currentLedger && (
+                    <button className="cta-sm" id={`claim-${c.id}`}>
+                      Claim Bounty
+                                            </button>
+                  )}
                   {c.state === 'open' && connection && (
                     <button
                       className="cta-sm"
@@ -187,6 +210,11 @@ export default function BountyBoardPage() {
                       onClick={() => claimBounty(c)}
                     >
                       {claimingId === c.id ? 'Claiming…' : 'Claim Bounty'}
+                    </button>
+                  )}
+                  {c.state === 'open' && connection && currentLedger > 0 && c.deadline_ledger <= currentLedger && (
+                    <button className="cta-sm cta-sm--danger" id={`cancel-${c.id}`}>
+                      Cancel
                     </button>
                   )}
                 </div>
