@@ -6,8 +6,12 @@ function truncate(address: string): string {
   return `${address.slice(0, 4)}…${address.slice(-4)}`;
 }
 
+function formatBalance(amount: number): string {
+  return amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
 export function WalletConnectButton() {
-  const { connection, isConnecting, error, connect, disconnect } = useWallet();
+  const { connection, isConnecting, error, balances, connect, disconnect } = useWallet();
 
   return (
     <div className="wallet-connect">
@@ -18,7 +22,13 @@ export function WalletConnectButton() {
           onClick={disconnect}
           title={`${connection.address} — click to disconnect`}
         >
-          {truncate(connection.address)}
+          <span className="wallet-btn-address">{truncate(connection.address)}</span>
+          {balances && (
+            <span className="wallet-btn-balance">
+              {formatBalance(balances.xlm)} XLM
+              {balances.usdc !== null && ` · ${formatBalance(balances.usdc)} USDC`}
+            </span>
+          )}
         </button>
       ) : (
         <button type="button" className="wallet-btn" onClick={() => void connect()} disabled={isConnecting}>
