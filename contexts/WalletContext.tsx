@@ -1,85 +1,88 @@
 'use client';
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import {
-  openWalletModal,
-  connectWallet,
-  signTransaction,
-  disconnectWallet,
-  getPersistedWalletId,
-} from '@/lib/wallets-kit';
+import { openWalletModal, disconnectWallet } from '@/lib/wallets-kit';
+import { sep010Auth, storeToken, loadToken, clearToken } from '@/lib/sep010';
+import { fetchAccountBalances, type AccountBalances } from '@/lib/balances';
 
-export interface WalletConnection {
+interface WalletConnection {
   address: string;
-  publicKey: string;
   walletId: string;
-  network: 'testnet' | 'mainnet';
 }
 
 interface WalletContextType {
   connection: WalletConnection | null;
   isConnecting: boolean;
   error: string | null;
-  /** Opens the Stellar Wallets Kit's built-in wallet-selector modal. */
+  /** Null before the first balance fetch resolves (or if it failed). */
+  balances: AccountBalances | null;
   connect: () => Promise<void>;
   disconnect: () => void;
-  sign: (xdr: string) => Promise<string>;
+  /** Re-fetches balances for the connected account, e.g. after a purchase. */
+  refreshBalances: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | null>(null);
-
-const NETWORK: 'testnet' | 'mainnet' =
-  process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet';
-
-function toConnection(address: string, walletId: string): WalletConnection {
-  return { address, publicKey: address, walletId, network: NETWORK };
-}
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [connection, setConnection] = useState<WalletConnection | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [balances, setBalances] = useState<AccountBalances | null>(null);
 
-  // Auto-reconnect: if a wallet id was persisted from a previous session,
-  // silently re-fetch its address on mount instead of showing the picker.
+  // Restore a still-valid SEP-0010 session after a page refresh. Runs after
+  // mount (not as a lazy useState initializer) so the client's first render
+  // matches the server's, avoiding a hydration mismatch.
   useEffect(() => {
-    const persistedId = getPersistedWalletId();
-    if (!persistedId) return;
-    connectWallet(persistedId)
-      .then((address) => setConnection(toConnection(address, persistedId)))
-      .catch(() => {
-        // Stale/unavailable wallet — leave the user logged out rather than
-        // surfacing an error for a connection they didn't just request.
-      });
+    const existing = loadToken();
+    if (existing) setConnection({ address: existing.address, walletId: '' });
   }, []);
+
+  const refreshBalances = useCallback(async () => {
+    if (!connection) {
+      setBalances(null);
+      return;
+    }
+    try {
+      setBalances(await fetchAccountBalances(connection.address));
+    } catch {
+      // A balance-fetch failure shouldn't take down the connection itself —
+      // the button just shows no balance until the next successful refresh.
+      setBalances(null);
+    }
+  }, [connection]);
+
+  // Fetches balances whenever the connected address changes (including on
+  // restore-from-refresh above), and clears them on disconnect.
+  useEffect(() => {
+    void refreshBalances();
+  }, [refreshBalances]);
 
   const connect = useCallback(async () => {
     setIsConnecting(true);
     setError(null);
     try {
       const { address, walletId } = await openWalletModal();
-      setConnection(toConnection(address, walletId));
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to connect wallet');
+      const token = await sep010Auth(address);
+      storeToken(token);
+      setConnection({ address, walletId });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to connect wallet');
     } finally {
       setIsConnecting(false);
     }
   }, []);
 
   const disconnect = useCallback(() => {
+    clearToken();
     setConnection(null);
-    disconnectWallet().catch(() => {});
+    setBalances(null);
+    void disconnectWallet();
   }, []);
 
-  const sign = useCallback(
-    async (xdr: string) => {
-      if (!connection) throw new Error('Wallet not connected');
-      return signTransaction(xdr);
-    },
-    [connection]
-  );
-
   return (
-    <WalletContext.Provider value={{ connection, isConnecting, error, connect, disconnect, sign }}>
+    <WalletContext.Provider
+      value={{ connection, isConnecting, error, balances, connect, disconnect, refreshBalances }}
+    >
       {children}
     </WalletContext.Provider>
   );

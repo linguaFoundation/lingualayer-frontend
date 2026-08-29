@@ -12,7 +12,7 @@
  *         → server verifies signature → returns JWT
  */
 
-import { signTransaction as signWithKit } from "./wallets-kit";
+import { signTransaction } from "./wallets-kit";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
 
@@ -26,10 +26,7 @@ export interface SEP010Token {
  * Full SEP-0010 authentication flow.
  * Fetches challenge, signs with connected wallet, exchanges for JWT.
  */
-export async function sep010Auth(
-  address: string,
-  walletId: string
-): Promise<SEP010Token> {
+export async function sep010Auth(address: string): Promise<SEP010Token> {
   // Step 1: fetch challenge
   const challengeRes = await fetch(
     `${API}/auth/challenge?address=${encodeURIComponent(address)}`
@@ -39,8 +36,8 @@ export async function sep010Auth(
   }
   const { transaction: challengeXdr } = await challengeRes.json();
 
-  // Step 2: sign with wallet
-  const signedTxXdr = await signWithKit(challengeXdr, walletId);
+  // Step 2: sign with the wallet already selected via openWalletModal()
+  const signedTxXdr = await signTransaction(challengeXdr, address);
 
   // Step 3: exchange for JWT
   const tokenRes = await fetch(`${API}/auth/token`, {

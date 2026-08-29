@@ -1,85 +1,94 @@
 /**
  * LinguaLayer — Stellar Wallets Kit Integration
  *
- * Uses @creit.tech/stellar-wallets-kit — the de-facto standard multi-wallet
- * library for Stellar that unifies wallets via a single interface.
+ * Uses @creit.tech/stellar-wallets-kit — a maintained multi-wallet library for
+ * Stellar that unifies wallets behind one interface via its static
+ * `StellarWalletsKit` class.
  *
- * Wallets registered below (no extra account/config required):
- *   - Freighter    (browser extension)
- *   - xBull        (browser extension + iOS/Android)
- *   - Lobstr       (browser extension + mobile)
- *   - Hana Wallet  (browser extension)
- *   - Rabet        (browser extension)
- *   - ALBEDO       (web-based key manager)
+ * `defaultModules()` cover wallets that work without extra configuration
+ * (Freighter, xBull, Lobstr, Hana, Rabet, Albedo, ...). WalletConnect is added
+ * on top when NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is set (free at
+ * https://cloud.reown.com) — its own QR-code-with-copy-link UI is provided by
+ * @reown/appkit, the underlying SDK, rather than reimplemented here.
+ * Hardware wallets (Ledger) need a Buffer polyfill and are added by #21.
+ * (Freighter, xBull, Lobstr, Hana, Rabet, Albedo, ...). Ledger is added on
+ * top via WebUSB — the SDK's own isAvailable() check already hides it from
+ * the picker on browsers without WebUSB support (Firefox, Safari), so no
+ * extra feature-detection is needed here. WalletConnect needs its own extra
+ * setup (a project id) and is added by #20.
  *
- * WalletConnect and Ledger are supported by the underlying kit but are left
- * out of this default module list: WalletConnect needs a Reown/WalletConnect
- * project id to be provisioned, and Ledger is a hardware-wallet flow with
- * its own UX considerations — both are out of scope for this migration.
- *
- * SSR safety: the kit package reads `localStorage` as a side effect of its
- * own module initialization (not just when its APIs are called), so it
- * cannot be imported at module scope here — that alone crashes `next build`
- * while prerendering pages that pull this file in via the wallet context,
- * even ones that never touch a wallet. Every kit import below is therefore
- * a dynamic `import()` inside `ensureInit()`, which only ever runs from a
- * browser event handler / effect, never during a server render.
+ * The SDK is loaded via a dynamic `import()` inside `getKit()` rather than a
+ * static top-level import: one of its internal state modules reads
+ * `globalThis.localStorage` at module-evaluation time, which doesn't exist in
+ * Next.js's Node.js prerender/SSR pass and crashes `next build`. Deferring the
+ * import means it's only ever evaluated client-side, from a user-triggered
+ * callback or a post-mount effect.
  */
+const NETWORK_ENV =
+  process.env.NEXT_PUBLIC_STELLAR_NETWORK === "mainnet" ? "mainnet" : "testnet";
 
-import type {
-  StellarWalletsKit as StellarWalletsKitType,
-  Networks as NetworksType,
-  ISupportedWallet,
-} from "@creit.tech/stellar-wallets-kit";
+let kitPromise: Promise<typeof import("@creit.tech/stellar-wallets-kit").StellarWalletsKit> | null = null;
 
-export const FREIGHTER_ID = "freighter";
-export const XBULL_ID = "xbull";
-export const LOBSTR_ID = "lobstr";
-export const HANA_ID = "hana";
-export const RABET_ID = "rabet";
-export const ALBEDO_ID = "albedo";
-
-const WALLET_ID_STORAGE_KEY = "linguaLayer:walletId";
-
-let kitPromise: Promise<{ Kit: typeof StellarWalletsKitType; network: NetworksType }> | null = null;
-
+const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 /**
- * Lazily loads and initializes the kit's static state. Safe to call
- * repeatedly — the underlying dynamic import + init only happens once.
+ * The Ledger module (via @ledgerhq/hw-transport-webusb) assumes a Node-style
+ * global `Buffer`, which browsers don't have. Polyfilled lazily, right before
+ * the module is constructed, rather than globally in next.config.ts, so
+ * pages that never touch the wallet kit don't pay for it.
  */
-function loadKit() {
+async function ensureBufferPolyfill(): Promise<void> {
+  if (typeof window === "undefined" || (window as typeof window & { Buffer?: unknown }).Buffer) return;
+  const { Buffer } = await import("buffer");
+  (window as typeof window & { Buffer: typeof Buffer }).Buffer = Buffer;
+}
+
+async function getKit() {
   if (!kitPromise) {
     kitPromise = (async () => {
-      const [{ StellarWalletsKit, Networks }, { FreighterModule }, { xBullModule }, { LobstrModule }, { HanaModule }, { RabetModule }, { AlbedoModule }] =
-        await Promise.all([
-          import("@creit.tech/stellar-wallets-kit"),
-          import("@creit.tech/stellar-wallets-kit/modules/freighter"),
-          import("@creit.tech/stellar-wallets-kit/modules/xbull"),
-          import("@creit.tech/stellar-wallets-kit/modules/lobstr"),
-          import("@creit.tech/stellar-wallets-kit/modules/hana"),
-          import("@creit.tech/stellar-wallets-kit/modules/rabet"),
-          import("@creit.tech/stellar-wallets-kit/modules/albedo"),
-        ]);
+      const [{ StellarWalletsKit, Networks }, { defaultModules }] = await Promise.all([
+        import("@creit.tech/stellar-wallets-kit"),
+        import("@creit.tech/stellar-wallets-kit/modules/utils"),
+      ]);
+      const network = NETWORK_ENV === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
+      const modules = defaultModules();
 
-      const network =
-        process.env.NEXT_PUBLIC_STELLAR_NETWORK === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
+      if (WALLETCONNECT_PROJECT_ID) {
+        const { WalletConnectModule, WalletConnectTargetChain } = await import(
+          "@creit.tech/stellar-wallets-kit/modules/wallet-connect"
+        );
+        modules.push(
+          new WalletConnectModule({
+            projectId: WALLETCONNECT_PROJECT_ID,
+            metadata: {
+              name: "LinguaLayer",
+              description: "Rights, licensing, and royalties for African language AI.",
+              url: typeof window !== "undefined" ? window.location.origin : "https://lingualayer.app",
+              icons: ["/icon.svg"],
+            },
+            allowedChains: [
+              NETWORK_ENV === "mainnet" ? WalletConnectTargetChain.PUBLIC : WalletConnectTargetChain.TESTNET,
+            ],
+          }),
+        );
+      }
+
+      StellarWalletsKit.init({ modules, network });
+      await ensureBufferPolyfill();
+      const { LedgerModule } = await import("@creit.tech/stellar-wallets-kit/modules/ledger");
 
       StellarWalletsKit.init({
-        network,
-        modules: [
-          new FreighterModule(),
-          new xBullModule(),
-          new LobstrModule(),
-          new HanaModule(),
-          new RabetModule(),
-          new AlbedoModule(),
-        ],
+        modules: [...defaultModules(), new LedgerModule()],
+        network: NETWORK_ENV === "mainnet" ? Networks.PUBLIC : Networks.TESTNET,
       });
-
-      return { Kit: StellarWalletsKit, network };
+      return StellarWalletsKit;
     })();
   }
   return kitPromise;
+}
+
+async function networkPassphrase(): Promise<string> {
+  const { Networks } = await import("@creit.tech/stellar-wallets-kit");
+  return NETWORK_ENV === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
 }
 
 export interface WalletInfo {
@@ -87,84 +96,35 @@ export interface WalletInfo {
   name: string;
   icon: string;
   isAvailable: boolean;
-  type: string;
 }
 
 export async function detectWallets(): Promise<WalletInfo[]> {
-  const { Kit } = await loadKit();
-  const supported: ISupportedWallet[] = await Kit.refreshSupportedWallets();
-  return supported.map((w) => ({
-    id: w.id,
-    name: w.name,
-    icon: w.icon,
-    isAvailable: w.isAvailable,
-    type: w.type,
-  }));
-}
-
-/** Persists `walletId` so a returning user can be auto-reconnected. */
-function persistWalletId(walletId: string): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(WALLET_ID_STORAGE_KEY, walletId);
-}
-
-export function getPersistedWalletId(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(WALLET_ID_STORAGE_KEY);
-}
-
-export function clearPersistedWalletId(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(WALLET_ID_STORAGE_KEY);
-}
-
-/** Connects directly to a known wallet id, without showing the picker UI. */
-export async function connectWallet(walletId: string): Promise<string> {
-  const { Kit } = await loadKit();
-  Kit.setWallet(walletId);
-  const { address } = await Kit.fetchAddress();
-  persistWalletId(walletId);
-  return address;
+  const kit = await getKit();
+  const supported = await kit.refreshSupportedWallets();
+  return supported.map((w) => ({ id: w.id, name: w.name, icon: w.icon, isAvailable: w.isAvailable }));
 }
 
 /**
- * Signs `xdr` with the currently-active wallet, or with `walletId` if given
- * (switching the kit's active wallet to it first).
+ * Opens the kit's built-in wallet picker modal. Resolves once the user has
+ * picked a wallet and granted access, with that wallet set as the kit's
+ * active module for subsequent `signTransaction` calls.
  */
-export async function signTransaction(xdr: string, walletId?: string): Promise<string> {
-  const { Kit, network } = await loadKit();
-  if (walletId) {
-    Kit.setWallet(walletId);
-  }
-  const { signedTxXdr } = await Kit.signTransaction(xdr, { networkPassphrase: network });
+export async function openWalletModal(): Promise<{ address: string; walletId: string }> {
+  const kit = await getKit();
+  const { address } = await kit.authModal();
+  return { address, walletId: kit.selectedModule.productId };
+}
+
+export async function signTransaction(xdr: string, address: string): Promise<string> {
+  const kit = await getKit();
+  const { signedTxXdr } = await kit.signTransaction(xdr, {
+    address,
+    networkPassphrase: await networkPassphrase(),
+  });
   return signedTxXdr;
 }
 
-/**
- * Opens the kit's built-in wallet-selector modal and resolves once the user
- * has picked a wallet and its address has been fetched.
- */
-export async function openWalletModal(): Promise<{ address: string; walletId: string }> {
-  const { Kit } = await loadKit();
-  const { KitEventType } = await import("@creit.tech/stellar-wallets-kit");
-
-  let selectedId: string | undefined;
-  const unsubscribe = Kit.on(KitEventType.WALLET_SELECTED, (event) => {
-    selectedId = event.payload.id;
-  });
-
-  try {
-    const { address } = await Kit.authModal();
-    const walletId = selectedId ?? Kit.selectedModule.productId;
-    persistWalletId(walletId);
-    return { address, walletId };
-  } finally {
-    unsubscribe();
-  }
-}
-
 export async function disconnectWallet(): Promise<void> {
-  const { Kit } = await loadKit();
-  clearPersistedWalletId();
-  return Kit.disconnect();
+  const kit = await getKit();
+  await kit.disconnect();
 }
