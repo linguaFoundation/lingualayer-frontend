@@ -3,8 +3,8 @@ node_modules/
 out/
 coverage/
 *.log
-.env*
 !.env.example
 
 # TypeScript build info
 *.tsbuildinfo
+config.bat
